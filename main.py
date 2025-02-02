@@ -3,6 +3,7 @@ import mediapipe as mp
 import numpy as np
 import time
 import chord_generator
+from playsound import playsound
 
 # --------------------- HAND TRACKING INITIALIZATION ---------------------
 mp_hands = mp.solutions.hands
@@ -108,6 +109,9 @@ def add_track(instrument):
     instrument["track_count"] = instrument.get("track_count", 0) + 1
     print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
     chordGenerator.SelectProgression(3)
+    chordGenerator.GetWavFromMidi()
+    playsound.playsound("myWaveFile.wav")
+    
 
 
 # --------------------- UI DRAWING FUNCTIONS ---------------------
@@ -221,7 +225,7 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                 elif name == "export":
                                     current_menu = MENU_EXPORT
                                     chordGenerator.GetWavFromMidi()
-                                    
+
                     elif current_menu == MENU_KITS:
                         if detect_pinch(hand_landmarks) and np.sqrt((x - back_button["pos"][0])**2 + (y - back_button["pos"][1])**2) < 100:
                             current_time = time.time()

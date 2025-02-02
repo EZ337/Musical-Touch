@@ -5,129 +5,6 @@ import wave
 import os
 import sys
 
-# Path to the synthesizer
-SYNTH_PATH = r"./fluidsynth-2.4.3-win10-x64/bin/fluidsynth.exe"
-WORKING_MIDI = MidiFile()
-WORKING_TRACK = MidiTrack()
-
-def note_to_midi(note):
-    """
-    Convert a note string (e.g., 'C4', 'D#4', 'Bb3') to a MIDI note number.
-    MIDI note numbers: C4 is 60.
-    """
-    note = note.strip()
-    if len(note) < 2:
-        raise ValueError("Invalid note: " + note)
-    
-    letter = note[0].upper()
-    accidental = ""
-    octave_str = ""
-    
-    if len(note) >= 3 and note[1] in ['#', 'b']:
-        accidental = note[1]
-        octave_str = note[2:]
-    else:
-        octave_str = note[1:]
-    
-    try:
-        octave = int(octave_str)
-    except ValueError:
-        raise ValueError("Invalid octave in note: " + note)
-    
-    # Define base note numbers (C = 0, C# = 1, etc.)
-    note_base = {
-        'C': 0,
-        'C#': 1,
-        'D': 2,
-        'D#': 3,
-        'E': 4,
-        'F': 5,
-        'F#': 6,
-        'G': 7,
-        'G#': 8,
-        'A': 9,
-        'A#': 10,
-        'B': 11
-    }
-    
-    # Handle flats by converting to the equivalent sharp
-    if accidental == 'b':
-        natural_value = note_base.get(letter)
-        if natural_value is None:
-            raise ValueError("Invalid note letter: " + note)
-        base_value = (natural_value - 1) % 12
-    else:
-        key = letter + accidental  # accidental will be empty if none
-        base_value = note_base.get(key)
-        if base_value is None:
-            raise ValueError("Invalid note: " + note)
-    
-    # MIDI note number calculation:
-    # C4 is 60, and MIDI numbers increase by one per semitone.
-    midi_number = 12 * (octave + 1) + base_value
-    return midi_number
-
-def create_midi(chords, chord_duration, output_file="progression.mid", tempo=500000):
-    """
-    Creates a MIDI file from a chord progression.
-    
-    chords: list of chords, where each chord is a list of note strings.
-    chord_duration: duration of each chord in seconds.
-    tempo: microseconds per beat (default 500000, corresponding to 120 BPM).
-    """
-    # mid = MidiFile()
-    track = MidiTrack()
-    
-    # mid.tracks.append(track)
-    WORKING_MIDI.tracks.append(track)
-    
-    # Set tempo
-    track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
-    
-    ticks_per_beat = WORKING_MIDI.ticks_per_beat
-    # Calculate chord duration in ticks:
-    # Seconds per beat = tempo / 1e6, so beats per chord = chord_duration / (tempo/1e6)
-    beats_per_chord = chord_duration / (tempo / 1e6)
-    ticks_per_chord = int(beats_per_chord * ticks_per_beat)
-    
-    for chord in chords:
-        # Turn notes on (all at the same time)
-        for note in chord:
-            midi_note = note_to_midi(note)
-            track.append(Message('note_on', note=midi_note, velocity=64, time=0))
-        # Wait for the duration of the chord
-        track.append(Message('note_off', note=0, velocity=0, time=ticks_per_chord))
-        # Turn notes off immediately after the wait
-        for note in chord:
-            midi_note = note_to_midi(note)
-            track.append(Message('note_off', note=midi_note, velocity=64, time=0))
-
-    # WORKING_MIDI.add_track(track)
-    
-    # mid.save(output_file)
-    # print("MIDI file saved as:", output_file)
-
-
-
-def trim_wav(input_wav, output_wav, target_duration, sample_rate=44100):
-    """
-    Trims the WAV file to exactly target_duration seconds.
-    """
-    target_frames = int(target_duration * sample_rate)
-    
-    with wave.open(input_wav, 'rb') as in_wav:
-        params = in_wav.getparams()
-        # Read all frames, calculate how many frames to keep
-        all_frames = in_wav.readframes(params.nframes)
-    
-    frame_size = params.sampwidth * params.nchannels
-    trimmed_frames = all_frames[:target_frames * frame_size]
-    
-    with wave.open(output_wav, 'wb') as out_wav:
-        out_wav.setparams(params)
-        out_wav.writeframes(trimmed_frames)
-    print(f"Trimmed {input_wav} to {target_duration} seconds for perfect looping.")
-
 
 
 # Define 20 chord progressions. Each progression is a list of chords,
@@ -278,29 +155,173 @@ progressions = [
 ]
 
 
-def GenerateWavFromMidi(sf2 : str, midiFileName : str, wavFileName : str, sampleRate = 44100):
-    # Build and run the FluidSynth command.
-    command = [
-        SYNTH_PATH,
-        "-ni",
-        sf2,
-        midiFileName,
-        "-F",
-        wavFileName,
-        "-r",
-        str(sampleRate)
-    ]
 
-    print(f"Converting {midiFileName} to {wavFileName} using FluidSynth...")
-    WORKING_MIDI.save(midiFileName)
-    result = subprocess.run(command)
+
+class ChordGenerator():
+    SYNTH_PATH = r"./fluidsynth-2.4.3-win10-x64/bin/fluidsynth.exe"
+    WORKING_MIDI = MidiFile()
+    soundfont = ""
+    tempo = 500000        # microseconds per beat (120 BPM)
+    midiFileName = "myMidi.mid"
+    wavFileName = "myWaveFile.wav"
+
+
+
+    def __init__(self, soundfont : str):
+        self.soundfont = soundfont
+        if not os.path.exists(self.soundfont):
+            print("Path to sf2 does not exist. Try again.")
+
     
-    if result.returncode == 0:
-        print(f"WAV file saved as: {wavFileName}")
-    else:
-        print("An error occurred while rendering the WAV file. Please check your FluidSynth installation and SoundFont path.")
+    def SetSf2(self, sf2):
+        self.soundfont = sf2
 
-    return result
+    
+    def note_to_midi(self, note):
+        """
+        Convert a note string (e.g., 'C4', 'D#4', 'Bb3') to a MIDI note number.
+        MIDI note numbers: C4 is 60.
+        """
+        note = note.strip()
+        if len(note) < 2:
+            raise ValueError("Invalid note: " + note)
+        
+        letter = note[0].upper()
+        accidental = ""
+        octave_str = ""
+        
+        if len(note) >= 3 and note[1] in ['#', 'b']:
+            accidental = note[1]
+            octave_str = note[2:]
+        else:
+            octave_str = note[1:]
+        
+        try:
+            octave = int(octave_str)
+        except ValueError:
+            raise ValueError("Invalid octave in note: " + note)
+        
+        # Define base note numbers (C = 0, C# = 1, etc.)
+        note_base = {
+            'C': 0,
+            'C#': 1,
+            'D': 2,
+            'D#': 3,
+            'E': 4,
+            'F': 5,
+            'F#': 6,
+            'G': 7,
+            'G#': 8,
+            'A': 9,
+            'A#': 10,
+            'B': 11
+        }
+        
+        # Handle flats by converting to the equivalent sharp
+        if accidental == 'b':
+            natural_value = note_base.get(letter)
+            if natural_value is None:
+                raise ValueError("Invalid note letter: " + note)
+            base_value = (natural_value - 1) % 12
+        else:
+            key = letter + accidental  # accidental will be empty if none
+            base_value = note_base.get(key)
+            if base_value is None:
+                raise ValueError("Invalid note: " + note)
+        
+        # MIDI note number calculation:
+        # C4 is 60, and MIDI numbers increase by one per semitone.
+        midi_number = 12 * (octave + 1) + base_value
+        return midi_number
+
+
+    def GenerateWavFromMidi(self, sf2 : str, midiFileName : str, wavFileName : str, sampleRate = 44100):
+        # Build and run the FluidSynth command.
+        command = [
+            self.SYNTH_PATH,
+            "-ni",
+            sf2,
+            midiFileName,
+            "-F",
+            wavFileName,
+            "-r",
+            str(sampleRate)
+        ]
+
+        print(f"Converting {midiFileName} to {wavFileName} using FluidSynth...")
+        self.WORKING_MIDI.save(midiFileName)
+        result = subprocess.run(command)
+        
+        if result.returncode == 0:
+            print(f"WAV file saved as: {wavFileName}")
+        else:
+            print("An error occurred while rendering the WAV file. Please check your FluidSynth installation and SoundFont path.")
+
+        return result
+
+    def SelectProgression(self, idx):
+        self.create_midi(progressions[idx], 2, self.midiFileName)
+    
+    def create_midi(self, chords, chord_duration, output_file="progression.mid", tempo=500000):
+        """
+        Creates a MIDI file from a chord progression.
+        
+        chords: list of chords, where each chord is a list of note strings.
+        chord_duration: duration of each chord in seconds.
+        tempo: microseconds per beat (default 500000, corresponding to 120 BPM).
+        """
+        # mid = MidiFile()
+        track = MidiTrack()
+        
+        # mid.tracks.append(track)
+        self.WORKING_MIDI.tracks.append(track)
+        
+        # Set tempo
+        track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
+        
+        ticks_per_beat = self.WORKING_MIDI.ticks_per_beat
+        # Calculate chord duration in ticks:
+        # Seconds per beat = tempo / 1e6, so beats per chord = chord_duration / (tempo/1e6)
+        beats_per_chord = chord_duration / (tempo / 1e6)
+        ticks_per_chord = int(beats_per_chord * ticks_per_beat)
+        
+        for chord in chords:
+            # Turn notes on (all at the same time)
+            for note in chord:
+                midi_note = self.note_to_midi(note)
+                track.append(Message('note_on', note=midi_note, velocity=64, time=0))
+            # Wait for the duration of the chord
+            track.append(Message('note_off', note=0, velocity=0, time=ticks_per_chord))
+            # Turn notes off immediately after the wait
+            for note in chord:
+                midi_note = self.note_to_midi(note)
+                track.append(Message('note_off', note=midi_note, velocity=64, time=0))
+
+    def BeginProcess(self):
+
+
+
+
+def trim_wav(input_wav, output_wav, target_duration, sample_rate=44100):
+    """
+    Trims the WAV file to exactly target_duration seconds.
+    """
+    target_frames = int(target_duration * sample_rate)
+    
+    with wave.open(input_wav, 'rb') as in_wav:
+        params = in_wav.getparams()
+        # Read all frames, calculate how many frames to keep
+        all_frames = in_wav.readframes(params.nframes)
+    
+    frame_size = params.sampwidth * params.nchannels
+    trimmed_frames = all_frames[:target_frames * frame_size]
+    
+    with wave.open(output_wav, 'wb') as out_wav:
+        out_wav.setparams(params)
+        out_wav.writeframes(trimmed_frames)
+    print(f"Trimmed {input_wav} to {target_duration} seconds for perfect looping.")
+
+
 
 def main():
 

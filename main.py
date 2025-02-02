@@ -133,7 +133,7 @@ def draw_links(frame):
                     cv2.line(frame, tuple(kit["pos"]), tuple(target["pos"]), (255, 0, 0), 2, cv2.LINE_AA)
 
 def draw_instrument_menu(frame, instrument):
-    if instrument is None:
+    if instrument is "None":
         return
     left_margin = 50
     y_offset = 50

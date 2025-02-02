@@ -234,6 +234,8 @@ class ChordGenerator():
         midi_number = 12 * (octave + 1) + base_value
         return midi_number
 
+    def GetWavFromMidi(self):
+        self.GenerateWavFromMidi(self.soundfont, self.midiFileName, self.wavFileName)
 
     def GenerateWavFromMidi(self, sf2 : str, midiFileName : str, wavFileName : str, sampleRate = 44100):
         # Build and run the FluidSynth command.
@@ -260,6 +262,7 @@ class ChordGenerator():
         return result
 
     def SelectProgression(self, idx):
+        print(f"Selected progression: {progressions[idx]}\nwith index {idx}")
         self.create_midi(progressions[idx], 2, self.midiFileName)
     
     def create_midi(self, chords, chord_duration, output_file="progression.mid", tempo=500000):

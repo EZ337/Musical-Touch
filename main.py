@@ -106,9 +106,9 @@ def add_track(instrument):
     Currently an empty function that just increments a track counter.
     """
     instrument["track_count"] = instrument.get("track_count", 0) + 1
+    print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
     chordGenerator.SelectProgression(3)
-    
-    # print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
+
 
 # --------------------- UI DRAWING FUNCTIONS ---------------------
 def draw_buttons(frame, buttons):
@@ -220,6 +220,7 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                     current_menu = MENU_KITS
                                 elif name == "export":
                                     current_menu = MENU_EXPORT
+                                    chordGenerator.GetWavFromMidi()
                     elif current_menu == MENU_KITS:
                         if detect_pinch(hand_landmarks) and np.sqrt((x - back_button["pos"][0])**2 + (y - back_button["pos"][1])**2) < 100:
                             current_time = time.time()

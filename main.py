@@ -221,6 +221,7 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                 elif name == "export":
                                     current_menu = MENU_EXPORT
                                     chordGenerator.GetWavFromMidi()
+                                    
                     elif current_menu == MENU_KITS:
                         if detect_pinch(hand_landmarks) and np.sqrt((x - back_button["pos"][0])**2 + (y - back_button["pos"][1])**2) < 100:
                             current_time = time.time()

@@ -2,45 +2,21 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
-import pygame
 
-# AUDIO INITIALIZATION
-pygame.mixer.init()
-piano_progressions_original = {i: pygame.mixer.Sound(f"wavs/progression_{i}.wav") for i in range(1, 21)}
-current_piano_chord_index = None
-current_piano_channel = None
-current_speed_factor = 1.0
-
-def change_playback_speed(sound, speed):
-    """Resample a pygame Sound to play at a different speed."""
-    arr = pygame.sndarray.array(sound)
-    n_samples, n_channels = arr.shape
-    new_length = int(n_samples / speed)
-    new_arr = np.zeros((new_length, n_channels), dtype=arr.dtype)
-    # Resample each channel separately.
-    for ch in range(n_channels):
-        new_arr[:, ch] = np.interp(
-            np.linspace(0, n_samples, new_length, endpoint=False),
-            np.arange(n_samples),
-            arr[:, ch]
-        ).astype(arr.dtype)
-    return pygame.sndarray.make_sound(new_arr)
-
-# HAND TRACKING
+# --------------------- HAND TRACKING INITIALIZATION ---------------------
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
 
 cap = cv2.VideoCapture(0)
-cap.set(3, 1280)
-cap.set(4, 720)
+cap.set(3, 1280)  # width
+cap.set(4, 720)   # height
 
-# MENU STATE
+# --------------------- MENU STATE DEFINITIONS ---------------------
 MENU_HOME = "home"
 MENU_KITS = "kits"
-MENU_LAYERS = "layers"
 MENU_EXPORT = "export"
 current_menu = MENU_HOME
-current_instrument = None
+current_instrument = None  # This will be one of our instruments (from kits)
 global_bpm = 120
 ignore_volume_adjustment = False
 dragging_kit = None
@@ -48,17 +24,19 @@ dragging_pos = None
 initial_pinch_position = None
 last_back_time = 0
 BACK_COOLDOWN = 0.5
-toggle_pressed = False
 
-# UI BUTTONS
+# Cooldown settings for the add track button
+ADD_TRACK_COOLDOWN = 0.5
+add_track_last_time = 0
+
+# --------------------- UI BUTTON DEFINITIONS ---------------------
 menu_buttons = [
-    {"name": "Kits", "pos": [250, 100]},
-    {"name": "Layers", "pos": [600, 100]},
-    {"name": "Export", "pos": [950, 100]},
+    {"name": "Kits", "pos": [400, 100]},
+    {"name": "Export", "pos": [800, 100]},
 ]
 back_button = {"name": "Back", "pos": [1150, 50], "radius": 30, "font_scale": 0.5}
 
-# INSTRUMENTS
+# --------------------- INSTRUMENT (KITS) DEFINITIONS ---------------------
 kits = [
     {
         "name": "Drums", 
@@ -66,15 +44,13 @@ kits = [
         "volume": 50,
         "chord_index": 0,
         "chords": ["Pattern1", "Pattern2", "Pattern3"],
-        "active": False
     },
     {
         "name": "Piano", 
         "pos": [600, 450],
         "volume": 50,
-        "chord_index": 0,
+        "chord_index": 0,  # valid indices: 0 to 19 for progressions 1-20 (UI only)
         "chords": [str(i) for i in range(1, 21)],
-        "active": False
     },
     {
         "name": "Guitar", 
@@ -82,13 +58,13 @@ kits = [
         "volume": 50,
         "chord_index": 0,
         "chords": ["Em", "G", "D", "C"],
-        "active": False
     },
 ]
 
 instrument_prev_x = None
 swipe_threshold = 40
 
+# --------------------- FUNCTIONS ---------------------
 def on_connection_formed(instrument):
     print(f"[EVENT] Connection formed with instrument: {instrument['name']}")
 
@@ -98,9 +74,7 @@ def on_connection_destroyed(instrument):
 def detect_pinch(hand_landmarks):
     thumb_tip = hand_landmarks.landmark[4]
     index_tip = hand_landmarks.landmark[8]
-    distance = np.linalg.norm(
-        np.array([thumb_tip.x, thumb_tip.y]) - np.array([index_tip.x, index_tip.y])
-    )
+    distance = np.linalg.norm(np.array([thumb_tip.x, thumb_tip.y]) - np.array([index_tip.x, index_tip.y]))
     return distance < 0.05
 
 def last_three_fingers_closed(hand_landmarks):
@@ -123,7 +97,15 @@ def find_nearest_kit(x, y):
             return kit
     return None
 
-# UI DRAWING
+def add_track(instrument):
+    """
+    Called when the add track button is pressed.
+    Currently an empty function that just increments a track counter.
+    """
+    instrument["track_count"] = instrument.get("track_count", 0) + 1
+    print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
+
+# --------------------- UI DRAWING FUNCTIONS ---------------------
 def draw_buttons(frame, buttons):
     for button in buttons:
         radius = button.get("radius", 50)
@@ -155,6 +137,7 @@ def draw_instrument_menu(frame, instrument):
         return
     left_margin = 50
     y_offset = 50
+    # Draw the header and control info.
     draw_left_aligned_text(frame, instrument["name"] + " Control", left_margin, y_offset, font_scale=1, color=(0, 0, 255))
     y_offset += 40
     chord = instrument["chords"][instrument["chord_index"]]
@@ -166,16 +149,18 @@ def draw_instrument_menu(frame, instrument):
     draw_left_aligned_text(frame, "Volume: " + str(instrument["volume"]) + "%", left_margin, y_offset, font_scale=0.8)
     y_offset += 40
     draw_left_aligned_text(frame, "BPM: " + str(global_bpm), left_margin, y_offset, font_scale=0.8)
-    toggle_center = (1100, 50)
-    toggle_radius = 20
-    if instrument.get("active", False):
-        toggle_color = (0, 255, 0)
-        toggle_text = "Active"
-    else:
-        toggle_color = (0, 0, 255)
-        toggle_text = "Inactive"
-    cv2.circle(frame, toggle_center, toggle_radius, toggle_color, -1, cv2.LINE_AA)
-    draw_left_aligned_text(frame, toggle_text, toggle_center[0] + toggle_radius + 5, toggle_center[1] + 5, font_scale=0.5)
+    y_offset += 40
+    # Display the track counter next to the other text.
+    track_count = instrument.get("track_count", 0)
+    draw_left_aligned_text(frame, f"Tracks: {track_count}", left_margin, y_offset, font_scale=0.8)
+    
+    # Draw the add track button (positioned at (1000, 50)).
+    add_track_center = (1000, 50)
+    add_track_radius = 20
+    cv2.circle(frame, add_track_center, add_track_radius, (0, 255, 0), -1, cv2.LINE_AA)
+    draw_centered_text(frame, "+", add_track_center[0], add_track_center[1], font_scale=1, thickness=2, color=(255,255,255))
+    
+    # Draw the back button.
     draw_buttons(frame, [back_button])
 
 def draw_menu(frame):
@@ -193,9 +178,6 @@ def draw_menu(frame):
             cv2.line(frame, tuple(dragging_kit["pos"]), dragging_pos, (100, 255, 100), 2, cv2.LINE_AA)
     elif current_menu in ["drums", "piano", "guitar"]:
         draw_instrument_menu(frame, current_instrument)
-    elif current_menu == MENU_LAYERS:
-        draw_buttons(frame, [back_button])
-        draw_centered_text(frame, "Layers Menu", 640, 50, font_scale=1)
     elif current_menu == MENU_EXPORT:
         draw_centered_text(frame, "Exporting Project...", 640, 360, font_scale=1)
 
@@ -229,11 +211,8 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                 name = selected_button["name"].lower()
                                 if name == "kits":
                                     current_menu = MENU_KITS
-                                elif name == "layers":
-                                    current_menu = MENU_LAYERS
                                 elif name == "export":
                                     current_menu = MENU_EXPORT
-
                     elif current_menu == MENU_KITS:
                         if detect_pinch(hand_landmarks) and np.sqrt((x - back_button["pos"][0])**2 + (y - back_button["pos"][1])**2) < 100:
                             current_time = time.time()
@@ -244,7 +223,6 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                 dragging_pos = None
                                 initial_pinch_position = None
                                 continue
-
                         if detect_pinch(hand_landmarks):
                             if dragging_kit is None:
                                 kit = find_nearest_kit(x, y)
@@ -281,17 +259,16 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                 dragging_kit = None
                                 dragging_pos = None
                                 initial_pinch_position = None
-
                     elif current_menu in ["drums", "piano", "guitar"]:
-                        toggle_center = np.array([1100, 50])
-                        if detect_pinch(hand_landmarks) and np.linalg.norm(np.array([x, y]) - toggle_center) < 30:
-                            if not toggle_pressed:
-                                current_instrument["active"] = not current_instrument.get("active", False)
-                                toggle_pressed = True
+                        # Check for the add track button.
+                        add_track_center = np.array([1000, 50])
+                        add_track_radius = 20
+                        if detect_pinch(hand_landmarks) and np.linalg.norm(np.array([x, y]) - add_track_center) < add_track_radius:
+                            if time.time() - add_track_last_time > ADD_TRACK_COOLDOWN:
+                                add_track(current_instrument)
+                                add_track_last_time = time.time()
                             continue
-                        else:
-                            toggle_pressed = False
-
+                        # Back button handling.
                         if detect_pinch(hand_landmarks) and np.sqrt((x - back_button["pos"][0])**2 + (y - back_button["pos"][1])**2) < 100:
                             current_time = time.time()
                             if current_time - last_back_time > BACK_COOLDOWN:
@@ -300,7 +277,7 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                 current_instrument = None
                                 instrument_prev_x = None
                                 continue
-
+                        # Volume adjustment and chord swiping.
                         if ignore_volume_adjustment:
                             if not detect_pinch(hand_landmarks):
                                 ignore_volume_adjustment = False
@@ -320,29 +297,10 @@ with mp_hands.Hands(min_detection_confidence=0.7,
                                         else:
                                             current_instrument["chord_index"] = (current_instrument["chord_index"] - 1) % len(current_instrument["chords"])
                                     instrument_prev_x = x
-
                 elif hand_label == "left":
                     if current_menu in ["drums", "piano", "guitar"]:
                         if detect_pinch(hand_landmarks):
                             global_bpm = int(((720 - y) / 720) * 200) + 60
-
-        if current_menu in ["drums", "piano", "guitar"] and current_instrument is not None:
-            if current_instrument["name"].lower() == "piano":
-                if current_instrument.get("active", False):
-                    speed_factor = global_bpm / 120.0
-                    chord_num = int(current_instrument["chords"][current_instrument["chord_index"]])
-                    if (current_piano_chord_index != current_instrument["chord_index"]) or (abs(current_speed_factor - speed_factor) > 0.01):
-                        if current_piano_channel is not None:
-                            current_piano_channel.stop()
-                        new_sound = change_playback_speed(piano_progressions_original[chord_num], speed_factor)
-                        current_piano_channel = new_sound.play(loops=-1)
-                        current_speed_factor = speed_factor
-                        current_piano_chord_index = current_instrument["chord_index"]
-                else:
-                    if current_piano_channel is not None:
-                        current_piano_channel.stop()
-                        current_piano_channel = None
-                        current_piano_chord_index = None
 
         cv2.imshow("Hand Gesture Music UI", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):

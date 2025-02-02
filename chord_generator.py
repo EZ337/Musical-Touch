@@ -3,6 +3,12 @@ from mido import Message, MidiFile, MidiTrack
 import subprocess
 import wave
 import os
+import sys
+
+# Path to the synthesizer
+SYNTH_PATH = r"./fluidsynth-2.4.3-win10-x64/bin/fluidsynth.exe"
+WORKING_MIDI = MidiFile()
+WORKING_TRACK = MidiTrack()
 
 def note_to_midi(note):
     """
@@ -69,14 +75,16 @@ def create_midi(chords, chord_duration, output_file="progression.mid", tempo=500
     chord_duration: duration of each chord in seconds.
     tempo: microseconds per beat (default 500000, corresponding to 120 BPM).
     """
-    mid = MidiFile()
+    # mid = MidiFile()
     track = MidiTrack()
-    mid.tracks.append(track)
+    
+    # mid.tracks.append(track)
+    WORKING_MIDI.tracks.append(track)
     
     # Set tempo
     track.append(mido.MetaMessage('set_tempo', tempo=tempo, time=0))
     
-    ticks_per_beat = mid.ticks_per_beat
+    ticks_per_beat = WORKING_MIDI.ticks_per_beat
     # Calculate chord duration in ticks:
     # Seconds per beat = tempo / 1e6, so beats per chord = chord_duration / (tempo/1e6)
     beats_per_chord = chord_duration / (tempo / 1e6)
@@ -93,17 +101,23 @@ def create_midi(chords, chord_duration, output_file="progression.mid", tempo=500
         for note in chord:
             midi_note = note_to_midi(note)
             track.append(Message('note_off', note=midi_note, velocity=64, time=0))
+
+    # WORKING_MIDI.add_track(track)
     
-    mid.save(output_file)
-    print("MIDI file saved as:", output_file)
+    # mid.save(output_file)
+    # print("MIDI file saved as:", output_file)
+
+
 
 def trim_wav(input_wav, output_wav, target_duration, sample_rate=44100):
     """
     Trims the WAV file to exactly target_duration seconds.
     """
     target_frames = int(target_duration * sample_rate)
+    
     with wave.open(input_wav, 'rb') as in_wav:
         params = in_wav.getparams()
+        # Read all frames, calculate how many frames to keep
         all_frames = in_wav.readframes(params.nframes)
     
     frame_size = params.sampwidth * params.nchannels
@@ -114,7 +128,11 @@ def trim_wav(input_wav, output_wav, target_duration, sample_rate=44100):
         out_wav.writeframes(trimmed_frames)
     print(f"Trimmed {input_wav} to {target_duration} seconds for perfect looping.")
 
-# General Chord Progressionss
+
+
+# Define 20 chord progressions. Each progression is a list of chords,
+# and each chord is represented as a list of note strings.
+# These progressions use common harmonies (mostly in C major).
 progressions = [
     # 1. I - IV - V - I (C major)
     [
@@ -258,54 +276,95 @@ progressions = [
         ["G4", "B4", "D5"]
     ]
 ]
-    
 
+
+def GenerateWavFromMidi(sf2 : str, midiFileName : str, wavFileName : str, sampleRate = 44100):
+    # Build and run the FluidSynth command.
+    command = [
+        SYNTH_PATH,
+        "-ni",
+        sf2,
+        midiFileName,
+        "-F",
+        wavFileName,
+        "-r",
+        str(sampleRate)
+    ]
+
+    print(f"Converting {midiFileName} to {wavFileName} using FluidSynth...")
+    WORKING_MIDI.save(midiFileName)
+    result = subprocess.run(command)
+    
+    if result.returncode == 0:
+        print(f"WAV file saved as: {wavFileName}")
+    else:
+        print("An error occurred while rendering the WAV file. Please check your FluidSynth installation and SoundFont path.")
+
+    return result
 
 def main():
-    # Define 20 chord progressions. Each progression is a list of chords,
-    # and each chord is represented as a list of note strings.
-    # These progressions use common harmonies (mostly in C major).
 
-    # Settings
-    chord_duration = 2.0  # seconds per chord
-    tempo = 500000        # microseconds per beat (120 BPM)
-    
-    # Path to FluidSynth and the soundfont.
-    fluidsynth_path = r"./fluidsynth-2.4.3-win10-x64/bin/fluidsynth.exe"
-    soundfont = "FluidR3_GM.sf2"  # Ensure this file exists or update the path accordingly.
-    sample_rate = 44100
-    
-    # Process each progression
-    for idx, chords in enumerate(progressions, start=1):
-        midi_filename = f"progression_{idx}.mid"
-        wav_filename = f"progression_{idx}.wav"
-        print(f"\n--- Generating progression {idx} ---")
-        create_midi(chords, chord_duration, output_file=midi_filename, tempo=tempo)
+    ans = "y"
+    midi_filename = "my_midi.mid"
+    wav_filename = "my_wav.wav"
+    soundfont = ""
+
+    while(True):
+
+        # We are done adding tracks. Generate midi
+        if (ans.lower().strip() == "n" or ans.lower().strip() == "no"):
+            break
         
-        # Build and run the FluidSynth command.
-        command = [
-            fluidsynth_path,
-            "-ni",
-            soundfont,
-            midi_filename,
-            "-F",
-            wav_filename,
-            "-r",
-            str(sample_rate)
-        ]
-        print(f"Converting {midi_filename} to {wav_filename} using FluidSynth...")
-        result = subprocess.run(command)
-        if result.returncode == 0:
-            print(f"WAV file saved as: {wav_filename}")
-            # Calculate expected total duration for this progression
-            target_duration = chord_duration * len(chords)
-            # Trim the WAV file to remove any extra tail so it loops perfectly.
-            temp_wav = f"trimmed_{wav_filename}"
-            trim_wav(wav_filename, temp_wav, target_duration, sample_rate)
-            # Replace the original WAV with the trimmed version.
-            os.replace(temp_wav, wav_filename)
-        else:
-            print("An error occurred while rendering the WAV file. Please check your FluidSynth installation and SoundFont path.")
+        soundfont = input("Input the path to the sf2 you want to use ").strip()
+
+        if not os.path.exists(soundfont):
+            print("Path to sf2 does not exist. Try again.")
+            ans = input("Add another track? 'y'/'n': ").strip()
+            continue
+
+        # Settings
+        chord_duration = 2.0  # seconds per chord
+        tempo = 500000        # microseconds per beat (120 BPM)
+        
+        # Path to FluidSynth and the soundfont.
+        sample_rate = 44100
+
+        selectedProgressions = input("Type in your desired progressions. 0-20 is supported as of now ").split()
+
+        # Concatenate the list of the chords from the selected numbers
+        chords = [progressions[int(idx)] for idx in selectedProgressions]
+
+        for chord in chords:
+            create_midi(chord, chord_duration, midi_filename, tempo)
+        
+
+
+        ans = input("Add another track? 'y'/'n': ")
+   
+    command = [
+        SYNTH_PATH,
+        "-ni",
+        soundfont,
+        midi_filename,
+        "-F",
+        wav_filename,
+        "-r",
+        str(sample_rate)
+    ]
+
+    # result = subprocess.run(command)
+    result = GenerateWavFromMidi(soundfont, midi_filename, wav_filename)
+    # if result.returncode == 0:
+    #     # Calculate expected total duration for this progression
+    #     target_duration = chord_duration * len(chords)
+    #     # Trim the WAV file to remove any extra tail so it loops perfectly.
+    #     temp_wav = f"trimmed_{wav_filename}"
+    #     trim_wav(wav_filename, temp_wav, target_duration, sample_rate)
+    #     # Replace the original WAV with the trimmed version.
+    #     os.replace(temp_wav, wav_filename)
+    # else:
+    #     print("An error occurred while rendering the WAV file. Please check your FluidSynth installation and SoundFont path.")
+            
     
     print("\nDone generating and trimming all chord progressions.")
 

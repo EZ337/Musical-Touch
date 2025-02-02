@@ -171,3 +171,4 @@ cython_debug/
 .pypirc
 *.wav
 tests/Yurrr.zip
+FluidR3_GM/FluidR3_GM.sf2

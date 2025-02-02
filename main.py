@@ -29,7 +29,8 @@ def change_playback_speed(sound, speed):
 # HAND TRACKING
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
-cap = cv2.VideoCapture(1)
+
+cap = cv2.VideoCapture(0)
 cap.set(3, 1280)
 cap.set(4, 720)
 

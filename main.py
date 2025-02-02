@@ -3,7 +3,6 @@ import mediapipe as mp
 import numpy as np
 import time
 import chord_generator
-from playsound import playsound
 
 # --------------------- HAND TRACKING INITIALIZATION ---------------------
 mp_hands = mp.solutions.hands
@@ -110,7 +109,6 @@ def add_track(instrument):
     print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
     chordGenerator.SelectProgression(3)
     chordGenerator.GetWavFromMidi()
-    playsound.playsound("myWaveFile.wav")
     
 
 

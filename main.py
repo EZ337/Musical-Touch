@@ -2,10 +2,13 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import time
+import chord_generator
 
 # --------------------- HAND TRACKING INITIALIZATION ---------------------
 mp_hands = mp.solutions.hands
 mp_draw = mp.solutions.drawing_utils
+
+chordGenerator = chord_generator.ChordGenerator("sf2/piano.sf2")
 
 cap = cv2.VideoCapture(0)
 cap.set(3, 1280)  # width
@@ -103,7 +106,9 @@ def add_track(instrument):
     Currently an empty function that just increments a track counter.
     """
     instrument["track_count"] = instrument.get("track_count", 0) + 1
-    print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
+    chordGenerator.SelectProgression(3)
+    
+    # print(f"Added track to {instrument['name']}. Total tracks: {instrument['track_count']}")
 
 # --------------------- UI DRAWING FUNCTIONS ---------------------
 def draw_buttons(frame, buttons):
@@ -143,6 +148,8 @@ def draw_instrument_menu(frame, instrument):
     chord = instrument["chords"][instrument["chord_index"]]
     if instrument["name"].lower() == "piano":
         draw_left_aligned_text(frame, "Progression: " + chord, left_margin, y_offset, font_scale=0.8)
+        chordGenerator.SetSf2("sf2/piano.sf2")
+
     else:
         draw_left_aligned_text(frame, "Chord: " + chord, left_margin, y_offset, font_scale=0.8)
     y_offset += 40

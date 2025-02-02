@@ -297,9 +297,6 @@ class ChordGenerator():
                 midi_note = self.note_to_midi(note)
                 track.append(Message('note_off', note=midi_note, velocity=64, time=0))
 
-    def BeginProcess(self):
-
-
 
 
 def trim_wav(input_wav, output_wav, target_duration, sample_rate=44100):
